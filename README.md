@@ -14,6 +14,7 @@ Icinga 2 Plugin for Ciliatus
 * Include `check_ciliatus.conf` in your Icinga 2 configuration by either
   * placing it in Icinga 2's `conf.d` directory (usually `/etc/icinga2/conf.d`)
   * including it manually in your `icinga2.conf` (usually `/etc/icinga2/icinga2.conf`): `include "check_ciliatus.conf"`
+* Create a user within your Ciliatus instance without any special permissions, generate an access token and store it in the `ciliatus_token_pass` variable on your service/service template
 
 ## Plugin output
 
