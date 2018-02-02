@@ -1,5 +1,5 @@
 # check_ciliatus
-Icinga 2 Plugin for Ciliatus
+Icinga 2 Plugin for [Ciliatus](https://github.com/ciliatus/ciliatus)
 
 * Warning and critical thresholds for all execution times
 * Performance data for all metrics
