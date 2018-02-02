@@ -1,6 +1,9 @@
 # check_ciliatus
 Icinga 2 Plugin for Ciliatus
 
+* Warning and critical thresholds for all execution times
+* Performance data for all metrics
+
 ## Requirements
 
 * Python 3
@@ -11,3 +14,7 @@ Icinga 2 Plugin for Ciliatus
 * Include `check_ciliatus.conf` in your Icinga 2 configuration by either
   * placing it in Icinga 2's `conf.d` directory (usually `/etc/icinga2/conf.d`)
   * including it manually in your `icinga2.conf` (usually `/etc/icinga2/icinga2.conf`): `include "check_ciliatus.conf"`
+
+## Plugin output
+
+![Plugin Output](plugin-output.jpg)
