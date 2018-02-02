@@ -1,0 +1,228 @@
+#!/usr/bin/python
+
+import json
+from optparse import OptionParser
+import socket
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+parser = OptionParser()
+parser.add_option("-H", "--host",
+                  dest="hostname",
+                  help="Ciliatus hostname, e.g. demo01.ciliatus.io")
+parser.add_option("-t", "--token",
+                  dest="token",
+                  help="Authentication token. Can be created in ciliatus under 'Settings' -> 'Security'")
+parser.add_option("-p", "--port",
+                  dest="port",
+                  type="string",
+                  default="443",
+                  help="HTTP Port (default 443)")
+parser.add_option("-P", "--protocol",
+                  dest="protocol",
+                  default="https",
+                  help="Protocol (default https)")
+
+parser.add_option("--min-exec-time-5m-warn",
+                  dest="min_exec_time_5m_warn",
+                  help="Warning threshold minimum execution time last 5 minutes")
+parser.add_option("--min-exec-time-15m-warn",
+                  dest="min_exec_time_15m_warn",
+                  help="Warning threshold minimum execution time last 15 minutes")
+parser.add_option("--min-exec-time-30m-warn",
+                  dest="min_exec_time_30m_warn",
+                  help="Warning threshold minimum execution time last 30 minutes")
+
+parser.add_option("--min-exec-time-5m-crit",
+                  dest="min_exec_time_5m_crit",
+                  help="Critical threshold minimum execution time last 5 minutes")
+parser.add_option("--min-exec-time-15m-crit",
+                  dest="min_exec_time_15m_crit",
+                  help="Critical threshold minimum execution time last 15 minutes")
+parser.add_option("--min-exec-time-30m-crit",
+                  dest="min_exec_time_30m_crit",
+                  help="Critical threshold minimum execution time last 30 minutes")
+
+parser.add_option("--avg-exec-time-5m-warn",
+                  dest="avg_exec_time_5m_warn",
+                  help="Warning threshold average execution time last 5 minutes")
+parser.add_option("--avg-exec-time-15m-warn",
+                  dest="avg_exec_time_15m_warn",
+                  help="Warning threshold average execution time last 15 minutes")
+parser.add_option("--avg-exec-time-30m-warn",
+                  dest="avg_exec_time_30m_warn",
+                  help="Warning threshold average execution time last 30 minutes")
+
+parser.add_option("--avg-exec-time-5m-crit",
+                  dest="avg_exec_time_5m_crit",
+                  help="Critical threshold average execution time last 5 minutes")
+parser.add_option("--avg-exec-time-15m-crit",
+                  dest="avg_exec_time_15m_crit",
+                  help="Critical threshold average execution time last 15 minutes")
+parser.add_option("--avg-exec-time-30m-crit",
+                  dest="avg_exec_time_30m_crit",
+                  help="Critical threshold average execution time last 30 minutes")
+
+parser.add_option("--max-exec-time-5m-warn",
+                  dest="max_exec_time_5m_warn",
+                  help="Warning threshold maximum execution time last 5 minutes")
+parser.add_option("--max-exec-time-15m-warn",
+                  dest="max_exec_time_15m_warn",
+                  help="Warning threshold maximum execution time last 15 minutes")
+parser.add_option("--max-exec-time-30m-warn",
+                  dest="max_exec_time_30m_warn",
+                  help="Warning threshold maximum execution time last 30 minutes")
+
+parser.add_option("--max-exec-time-5m-crit",
+                  dest="max_exec_time_5m_crit",
+                  help="Critical threshold maximum execution time last 5 minutes")
+parser.add_option("--max-exec-time-15m-crit",
+                  dest="max_exec_time_15m_crit",
+                  help="Critical threshold maximum execution time last 15 minutes")
+parser.add_option("--max-exec-time-30m-crit",
+                  dest="max_exec_time_30m_crit",
+                  help="Critical threshold maximum execution time last 30 minutes")
+
+output = []
+perf_data = []
+severity = 0
+
+
+def return_result(text):
+    if severity == 0:
+        prefix = "OK"
+    elif severity == 1:
+        prefix = "WARNING"
+    elif severity == 2:
+        prefix = "CRITICAL"
+    else:
+        prefix = "UNKNOWN"
+
+    if len(output) < 1:
+        print("%s - %s|" % (prefix, text), end="")
+    else:
+        print("%s - %s|" % (prefix, ", ".join(output)), end="")
+
+    for metric in perf_data:
+        print(
+            "'%s'=%s%s;%s;%s;%s;%s " %
+            (metric["name"], metric["value"], metric["unit"],
+             metric["warn"], metric["crit"],
+             metric["min"], metric["max"]),
+            end=""
+        )
+    sys.exit(severity)
+
+
+def fail(text, code=2):
+    print(text)
+    sys.exit(code)
+
+
+def update_severity(new):
+    global severity
+    if severity < new < 3 or (severity == 0 and new > 2):
+        severity = new
+
+
+def get_health(url):
+    socket.setdefaulttimeout(30)
+
+    req = urllib.request.Request(url=url,
+                                 headers={
+                                     "Authorization": "Bearer %s" % options.token,
+                                     "Accept": "application/json"
+                                 },
+                                 method="GET")
+
+    try:
+        result = urllib.request.urlopen(req, timeout=30)
+    except socket.timeout:
+        fail("CRITICAL - %s timed out after %s seconds." % url)
+        return None
+    except ValueError as err:
+        fail("UNKNOWN - ValueError while opening url %s: %s" % (url, format(err)), 3)
+        return None
+    except urllib.error.HTTPError as err:
+        fail("CRITICAL - HTTPError while opening url %s: %s\n%s" % (url, format(err), err.read()))
+        return None
+    except urllib.error.URLError as err:
+        fail("CRITICAL - URLError while opening url %s: %s" % (url, format(err)))
+        return None
+    except Exception as err:
+        fail("UNKNOWN - Unknown Error while opening url %s: %s" %(url, format(err)), 3)
+        return None
+
+    try:
+        result = result.read().decode("utf-8")
+    except Exception as err:
+        fail("UNKNOWN - Unknown Error while reading result of request to url %s: %s" %(url, format(err)), 3)
+        return None
+
+    try:
+        json_data = json.loads(result)
+    except ValueError as err:
+        fail('UNKNOWN - Could not load json: %s' % err, 3)
+        return None
+    except Exception as err:
+        fail('UNKNOWN - Unknown exception while loading json: %s' % err, 3)
+        return None
+
+    return json_data
+
+
+(options, args) = parser.parse_args()
+options_dict = vars(options)
+
+url = "%s://%s:%s/api/v1/system/health" % (options.protocol, options.hostname, options.port)
+result = get_health(url)
+
+for key in result["data"]["requests"]["execution_time"]:
+    value = result["data"]["requests"]["execution_time"][key]
+    if options_dict["%s_warn" % key]:
+        if value > int(options_dict["%s_warn" % key]):
+            output.append("%s: %s" % (key, value))
+            update_severity(1)
+
+    if options_dict["%s_crit" % key]:
+        if value > int(options_dict["%s_crit" % key]):
+            output.append("%s: %s" % (key, value))
+            update_severity(2)
+
+    perf_data.append({
+        "name": key,
+        "value": value,
+        "unit": "ms",
+        "min": 0,
+        "max": "",
+        "warn": options_dict["%s_warn" % key] if options_dict["%s_warn" % key] is not None else "",
+        "crit": options_dict["%s_crit" % key] if options_dict["%s_crit" % key] is not None else ""
+    })
+
+for key in result["data"]["throughput"]["sensorreadings"]:
+    value = result["data"]["throughput"]["sensorreadings"][key]
+    perf_data.append({
+        "name": "sensorreadings_%s" % key,
+        "value": value,
+        "unit": "",
+        "min": 0,
+        "max": "",
+        "warn": "",
+        "crit": ""
+    })
+
+for key in result["data"]["throughput"]["notifications"]:
+    value = result["data"]["throughput"]["notifications"][key]
+    perf_data.append({
+        "name": "notifications_%s" % key,
+        "value": value,
+        "unit": "",
+        "min": 0,
+        "max": "",
+        "warn": "",
+        "crit": ""
+    })
+
+return_result("Ciliatus %s" % result["data"]["version"])
